@@ -1,0 +1,15 @@
+version: "3"
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    environment:
+      - 'OLLAMA=OLLAMAAPILOCATION'
+      - 'TOKEN=DISCORDTOKEN'
+      - 'MODEL=MODELNAME'
+      - 'CHANNELS=CHANNELIDSSEPERATEDBYCOMMA'
+    command: npm install && npm start
+    restart: unless-stopped
