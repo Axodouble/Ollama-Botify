@@ -87,7 +87,22 @@ const client = new Client({
 
 client.once(Events.ClientReady, async () => {
 	await client.guilds.fetch();
-	client.user.setPresence({ activities: [], status: "online" });
+  client.user.setPresence({
+    status: "online",
+    activities: [
+      {
+        name: "Ollama-Botify",
+        type: "WATCHING",
+      },
+    ],
+  });
+  
+  // Delete all interactions
+  const app = await client.application.fetch();
+  const commands = await app.commands.fetch();
+  for (const command of commands.values()) {
+    await command.delete();
+  }
 });
 
 const messages = {};
@@ -251,7 +266,7 @@ client.on(Events.MessageCreate, async message => {
     if (userInput.length == 0) return;
 
     // choose whether to respond or not
-    if (Math.random() * 100 > 95 || !message.mentions.has(client.user.id))
+    if (Math.random() * 100 > 95 && !message.mentions.has(client.user.id))
       return;
 
     // create conversation
