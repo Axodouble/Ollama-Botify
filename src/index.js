@@ -27,8 +27,6 @@ manager.on("shardCreate", async (shard) => {
 
   shard.once(Events.ClientReady, async () => {
     shard.send({ shardID: shard.id, logger: shardLog.data });
-
-    shardLog(LogLevel.Info, "Logging in");
     shardLog(LogLevel.Info, "Shard ready");
   });
 });

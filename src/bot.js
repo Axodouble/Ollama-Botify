@@ -13,7 +13,9 @@ const servers = process.env.OLLAMA.split(",").map((url) => ({
   url: new URL(url),
   available: true,
 }));
-const channels = process.env.CHANNELS.split(",");
+const respondingChannels = [];
+const channels = [];
+if (process.env.CHANNELS != null) process.env.CHANNELS.split(",");
 
 if (servers.length == 0) {
   throw new Error("No servers available");
@@ -90,7 +92,7 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
   ],
-  allowedMentions: { users: [], roles: [], repliedUser: false },
+  allowedMentions: { users: [], roles: [], repliedUser: true },
   partials: [Partials.Channel],
 });
 
@@ -182,9 +184,17 @@ async function replySplitMessage(replyMessage, content) {
   const replyMessages = [];
   for (let i = 0; i < responseMessages.length; ++i) {
     if (i == 0) {
-      replyMessages.push(await replyMessage.reply(responseMessages[i]));
+      replyMessages.push(
+        await replyMessage.reply(responseMessages[i]).catch(() => {
+          replyMessage.channel.send(responseMessages[i]);
+        })
+      );
     } else {
-      replyMessages.push(await replyMessage.channel.send(responseMessages[i]));
+      replyMessages.push(
+        await replyMessage.channel.send(responseMessages[i]).catch(() => {
+          replyMessage.channel.send(responseMessages[i]);
+        })
+      );
     }
   }
   return replyMessages;
@@ -193,18 +203,20 @@ async function replySplitMessage(replyMessage, content) {
 let typing = false;
 
 client.on(Events.MessageCreate, async (message) => {
-  if (typing) return;
+  if (respondingChannels.includes(message.channel.id)) return;
   try {
     await message.fetch();
 
     // return if not in the right channel
     const channelID = message.channel.id;
-    if (message.guild && !channels.includes(channelID)) return;
+    if (!message.guild) return;
+
+    // Check if channels were specified, if not, allow all channels
+    if (channels.length > 0 && !channels.includes(channelID)) return;
 
     // return if user is a bot, or non-default message
     if (!message.author.id) return;
-    if (message.author.bot && message.author.id != "1191951986019532830")
-      return;
+    if (message.author.bot) return;
 
     const botRole = message.guild?.members?.me?.roles?.botRole;
     const myMention = new RegExp(
@@ -271,12 +283,11 @@ client.on(Events.MessageCreate, async (message) => {
 
     if (userInput.length == 0) return;
 
-    // choose whether to respond or not
-    if (!(Math.random() * 100 < 95)) return;
     if (!message.mentions.has(client.user.id)) return;
+      //if ((channels.length > 0) && (Math.random() < 0.9)) return;
 
-    // create conversation
     if (messages[channelID] == null) {
+      // create conversation
       messages[channelID] = { amount: 0, last: null };
     }
 
@@ -287,6 +298,11 @@ client.on(Events.MessageCreate, async (message) => {
         message.author.username
       }: ${userInput}`
     );
+
+    // Add the channel to the responding channels
+    if (!respondingChannels.includes(channelID)) {
+      respondingChannels.push(channelID);
+    }
 
     // start typing
     typing = true;
@@ -312,7 +328,7 @@ client.on(Events.MessageCreate, async (message) => {
       // make request to model
       response = await makeRequest("/api/generate", "post", {
         model: model,
-        prompt: userInput,
+        prompt: `${message.author.username}: ${userInput}`,
         context,
       });
 
@@ -366,6 +382,8 @@ client.on(Events.MessageCreate, async (message) => {
     messages[channelID].last = context;
     ++messages[channelID].amount;
 
+    // remove channel from responding channels
+    respondingChannels.splice(respondingChannels.indexOf(channelID), 1);
     typing = false;
   } catch (error) {
     if (typing) {
